@@ -3,6 +3,8 @@ import { HttpClient,HttpHeaders } from '@angular/common/http';
 import * as echarts from 'echarts';
 import jsPDF from 'jspdf';
 import { saveAs } from 'file-saver';
+import { Router } from '@angular/router';
+
 
 interface ODEResponse {
   solution: number[][];
@@ -33,7 +35,7 @@ interface ProfileData {
             <i class="fas fa-user"></i>
             Profile
           </button>
-          <button class="logout-btn">
+<button class="logout-btn" (click)="logout()">
             <i class="fas fa-sign-out-alt"></i>
             Logout
           </button>
@@ -70,7 +72,7 @@ interface ProfileData {
         </div>
 
         <div class="download-buttons">
-          <button (click)="downloadPDF()" class="download-btn">
+          <button (click)="downloadedPDF()" class="download-btn">
             <i class="fas fa-file-pdf"></i>
             Download PDF
           </button>
@@ -78,7 +80,7 @@ interface ProfileData {
             <i class="fas fa-file-csv"></i>
             Download CSV
           </button>
-          <button (click)="downloadCSV()" class="download-btn">
+          <button (click)="downloadPDF(true)" class="download-btn">
             <i class="fas fa-envelope"></i>
             Send Solution To Email
           </button>
@@ -532,7 +534,7 @@ export class MainAppComponent implements AfterViewInit, OnDestroy {
    password: null
  };
 
-  constructor(private http: HttpClient) {
+  constructor(private http: HttpClient, private router: Router) {
     this.fetchProfileData();
 
   }
@@ -644,26 +646,120 @@ export class MainAppComponent implements AfterViewInit, OnDestroy {
 
 
 
-  // Existing download methods remain the same
-  downloadPDF() {
+  downloadPDF(sendByEmail: boolean = false) {
     if (!this.solution || !this.chart) return;
-
+  
     const pdf = new jsPDF();
     pdf.text('ODE Solution Results', 20, 20);
-
+  
+    // Get the chart data URL
     const dataURL = this.chart.getDataURL();
-    pdf.addImage(dataURL, 'PNG', 20, 40, 170, 100);
-
-    const startY = 160;
-    pdf.text('Solution Data:', 20, startY);
-    
-    this.solution.forEach((point, i) => {
-      const x = this.xStart + (i * ((this.xEnd - this.xStart) / (this.solution!.length - 1)));
-      pdf.text(`x: ${x.toFixed(4)}, y: ${point[0].toFixed(4)}`, 20, startY + 10 + (i * 7));
-    });
-
-    pdf.save('ode-solution.pdf');
+    const img = new Image();
+    img.src = dataURL;
+  
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) {
+          console.error('Error: Could not get canvas context');
+          return;
+        }
+  
+        canvas.width = img.width * 0.5; // Scale image to 50% to reduce size
+        canvas.height = img.height * 0.5;
+        context.drawImage(img, 0, 0, canvas.width, canvas.height);
+  
+        const compressedDataURL = canvas.toDataURL('image/png', 0.5); // Adjust compression ratio (0.5)
+        pdf.addImage(compressedDataURL, 'PNG', 20, 40, 170, 100);
+  
+        const startY = 160;
+        pdf.text('Solution Data:', 20, startY);
+  
+        // Add this check to ensure that 'this.solution' is not null or undefined
+        if (this.solution) {
+          this.solution.forEach((point, i) => {
+            const x =
+              this.xStart +
+              (i * ((this.xEnd - this.xStart) / (this.solution!.length - 1)));
+            pdf.text(`x: ${x.toFixed(4)}, y: ${point[0].toFixed(4)}`, 20, startY + 10 + i * 7);
+          });
+        } else {
+          console.error('Solution data is not available.');
+        }
+  
+        // Convert PDF to base64 (remove "data:" prefix)
+        const pdfBase64 = pdf.output('datauristring').split(',')[1];
+  
+        const fileName = 'ode-solution.pdf';
+  
+        if (sendByEmail) {
+          // Send base64 PDF by email
+          this.sendPDFByEmail(pdfBase64);
+        } else {
+          // Save PDF locally
+          pdf.save(fileName);
+        }
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+      }
+    };
+  
+    img.onerror = (err) => {
+      console.error('Error loading image:', err);
+    };
   }
+  
+
+
+
+  sendPDFByEmail(pdfBase64: string) {
+    const email = localStorage.getItem('mail');
+    
+    // Create the payload
+    const payload = {
+      email: email,
+      pdfBase64: pdfBase64
+    };
+  
+    const apiUrl = 'http://77.37.86.136:8002/email/send-pdf'; // Replace with your API endpoint
+  
+    // Make the POST request
+    this.http.post(apiUrl, payload).subscribe(
+      (response) => {
+        console.log('Email sent successfully:', response);
+        alert('File sent to email successfully!');
+      },
+      (error) => {
+        console.error('Error sending email:', error);
+        alert('Failed to send email. Please check your API and try again.');
+      }
+    );
+  }
+  
+
+
+  
+// Existing download methods remain the same
+downloadedPDF() {
+  if (!this.solution || !this.chart) return;
+
+  const pdf = new jsPDF();
+  pdf.text('ODE Solution Results', 20, 20);
+
+  const dataURL = this.chart.getDataURL();
+  pdf.addImage(dataURL, 'PNG', 20, 40, 170, 100);
+
+  const startY = 160;
+  pdf.text('Solution Data:', 20, startY);
+
+  this.solution.forEach((point, i) => {
+    const x = this.xStart + (i * ((this.xEnd - this.xStart) / (this.solution!.length - 1)));
+    pdf.text(`x: ${x.toFixed(4)}, y: ${point[0].toFixed(4)}`, 20, startY + 10 + (i * 7));
+  });
+
+  pdf.save('ode-solution.pdf');
+}
 
   downloadCSV() {
     if (!this.solution) return;
@@ -728,5 +824,14 @@ export class MainAppComponent implements AfterViewInit, OnDestroy {
           }
         });
     }
+ 
+  }
+  logout() {
+    // Clear local storage
+    localStorage.clear();
+
+    // Redirect to the sign-in page
+    this.router.navigate(['/signin']);
+
   }
 }

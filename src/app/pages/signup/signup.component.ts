@@ -46,6 +46,8 @@ export class SignupComponent {
         password: formData.password
       };
       localStorage.setItem('mdp', formData.password);
+      localStorage.setItem('mail', formData.email);
+
 
       // Call the API directly in the component
       this.signupUser(apiPayload).subscribe({

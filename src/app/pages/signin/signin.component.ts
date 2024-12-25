@@ -54,6 +54,8 @@ export class SigninComponent implements OnInit {
           localStorage.setItem('authToken', accessToken);
           localStorage.setItem('refreshToken', refreshToken);
           localStorage.setItem('mdp', password);
+          localStorage.setItem('mail', email);
+
 
           // Redirect to /ode-solver after successful login
           this.router.navigate(['/ode-solver']);
